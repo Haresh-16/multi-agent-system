@@ -51,7 +51,9 @@ class CritiqueAgent:
 
     def run(self, summary):
         try:
-            result = self.llm.invoke(self.prompt.format(summary=summary)).content.strip()
+            chat_history = "
+".join([f"User: {m.content}" if m.type == 'human' else f"AI: {m.content}" for m in self.memory.chat_memory.messages])
+                result = self.llm.invoke(self.prompt.format(summary=summary, chat_history=chat_history)).content.strip()
             logger.info(f"CritiqueAgent output: {result}")
             return result
         except Exception as e:
@@ -105,8 +107,12 @@ class DecomposerAgent:
 class RetrieverAgent:
     def __init__(self, llm, memory):
         self.prompt = PromptTemplate(
-            input_variables=["subquestion"],
-            template="Answer this question in 2 sentences using any previous context:\n\n{subquestion}"
+            input_variables=["subquestion", "chat_history"],
+            template="Here is the prior conversation context:
+{chat_history}
+
+Now answer the following sub-question in 2 sentences:
+{subquestion}"
         )
         self.llm = llm
         self.memory = memory
@@ -114,7 +120,9 @@ class RetrieverAgent:
     def run(self, subquestion):
         for attempt in range(3):
             try:
-                result = self.llm.invoke(self.prompt.format(subquestion=subquestion)).content.strip()
+                chat_history = "
+".join([f"User: {m.content}" if m.type == 'human' else f"AI: {m.content}" for m in self.memory.chat_memory.messages])
+                result = self.llm.invoke(self.prompt.format(subquestion=subquestion, chat_history=chat_history)).content.strip()
                 if result and not result.lower().startswith("[error"):
                     self.memory.chat_memory.add_user_message(subquestion)
                     self.memory.chat_memory.add_ai_message(result)
@@ -127,17 +135,26 @@ class RetrieverAgent:
 
 # SynthesizerAgent: Summarizes multiple sub-question answers into a cohesive final insight
 class SynthesizerAgent:
-    def __init__(self, llm):
+    def __init__(self, llm, memory):
         self.prompt = PromptTemplate(
-            input_variables=["responses"],
-            template="Given these pieces of information:\n\n{responses}\n\nSummarize the key insight in 3 sentences."
+            input_variables=["responses", "chat_history"],
+            template="Here is the prior conversation:
+{chat_history}
+
+Given these pieces of information:
+{responses}
+
+Summarize the key insight in 3 sentences."
         )
         self.llm = llm
+        self.memory = memory
 
     def run(self, responses):
         for attempt in range(3):
             try:
-                result = self.llm.invoke(self.prompt.format(responses=responses)).content.strip()
+                chat_history = "
+".join([f"User: {m.content}" if m.type == 'human' else f"AI: {m.content}" for m in self.memory.chat_memory.messages])
+                result = self.llm.invoke(self.prompt.format(responses=responses, chat_history=chat_history)).content.strip()
                 if result and not result.lower().startswith("[error"):
                     logger.info(f"SynthesizerAgent output: {result}")
                     return result
@@ -166,12 +183,17 @@ class ValidatorAgent:
 
 # ExplainerAgent: Adds elaboration to a completed summary when asked to "explain more"
 class ExplainerAgent:
-    def __init__(self, llm):
+    def __init__(self, llm, memory):
         self.prompt = PromptTemplate(
-            input_variables=["summary"],
-            template="Explain this summary in more detail for a technical audience:\n\n{summary}"
+            input_variables=["summary", "chat_history"],
+            template="Here is the chat history:
+{chat_history}
+
+Explain this summary in more detail for a technical audience:
+{summary}"
         )
         self.llm = llm
+        self.memory = memory
 
     def run(self, summary):
         try:
@@ -194,9 +216,9 @@ def handle_query(req: QueryRequest, background_tasks: BackgroundTasks):
 
     decomposer = DecomposerAgent(ChatOpenAI(temperature=0.5))
     retriever = RetrieverAgent(ChatOpenAI(temperature=0.0), memory)
-    synthesizer = SynthesizerAgent(ChatOpenAI(temperature=0.7))
+    synthesizer = SynthesizerAgent(ChatOpenAI(temperature=0.7), memory)
     validator = ValidatorAgent(ChatOpenAI(temperature=0.2))
-    explainer = ExplainerAgent(ChatOpenAI(temperature=0.6))
+    explainer = ExplainerAgent(ChatOpenAI(temperature=0.6), memory)
 
     def node_decompose(state):
         subqs = decomposer.run(state["query"])
@@ -242,7 +264,7 @@ def handle_query(req: QueryRequest, background_tasks: BackgroundTasks):
     def process_query():
         result = graph.invoke({"query": req.query})
         memory_json = json.dumps(memory.load_memory_variables({}))
-        rdb.set(f"result:{session_id}", json.dumps({"output": result, "memory": memory_json}))
+        rdb.set(f"result:{session_id}", json.dumps({"state_transitions": result, "output": result, "memory": memory_json}))
         rdb.set(f"status:{session_id}", "complete")
 
     background_tasks.add_task(process_query)
