@@ -1,4 +1,4 @@
-To deploy your entire agentic AI system on **AWS**, here’s a clean, scalable, and cost-effective architecture with just the right services — optimized for production, but simple enough to manage.
+
 
 ---
 
@@ -130,17 +130,3 @@ Load them securely into your app at runtime.
 | S3          | Pay-per-GB for PDF storage             |
 
 ---
-
-## 🧠 Bonus: Fully Serverless Version
-
-* Replace ECS with **API Gateway + Lambda (Zappa)**
-* Use **AWS Step Functions** to simulate the LangGraph pipeline
-* Redis via **ElastiCache or DynamoDB TTL**
-
----
-
-Would you like:
-
-* A Dockerfile + ECS task definition example?
-* A Terraform config to automate it?
-* A GitHub Actions CI/CD workflow to build & deploy?
