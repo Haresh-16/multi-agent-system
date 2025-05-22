@@ -123,10 +123,3 @@ POST /query
 ```
 
 ---
-
-## 🧠 STAR Summary (Interview)
-
-* **S**: Legal teams filing patents often need AI to interpret documents
-* **T**: Build an agentic assistant that answers questions using private and public knowledge
-* **A**: Used LangGraph + LangChain + Redis + MCP public APIs
-* **R**: Created a reusable, context-aware system with fallback enrichment and traceable citations
